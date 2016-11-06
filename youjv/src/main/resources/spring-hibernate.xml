@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:util="http://www.springframework.org/schema/util"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+            http://www.springframework.org/schema/beans/spring-beans-4.1.xsd
+            http://www.springframework.org/schema/mvc
+            http://www.springframework.org/schema/beans/spring-mvc-4.1.xsd
+            http://www.springframework.org/schema/tx
+            http://www.springframework.org/schema/tx/spring-tx-4.1.xsd
+            http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-3.2.xsd
+            http://www.springframework.org/schema/aop
+            http://www.springframework.org/schema/aop/spring-aop-4.1.xsd http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd">
+
+    <!--设定spring对注解的支持-->
+    <context:annotation-config/>
+
+    <!--设定去哪些地方找注解-->
+    <context:component-scan base-package="com.gongxiangcloud.youjv"></context:component-scan>
+
+
+
+
+
+    <!-- 配置数据源 c3p0 -->
+    <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource"
+          destroy-method="close">
+        <property name="driverClass" value="${jdbc.driver}" />
+        <property name="jdbcUrl" value="${jdbc.url}" />
+        <property name="user" value="${jdbc.username}" />
+        <property name="password" value="${jdbc.password}" />
+
+        <!-- 请求超时时间 -->
+        <property name="checkoutTimeout" value="30000" />
+        <!-- 每60秒检查所有连接池中的空闲连接。默认值: 0，不检查 -->
+        <property name="idleConnectionTestPeriod" value="30" />
+        <!-- 连接数据库连接池最大空闲时间 -->
+        <property name="maxIdleTime" value="30" />
+        <!-- 连接池初始化连接数 -->
+        <property name="initialPoolSize" value="5" />
+        <property name="minPoolSize" value="5" />
+        <property name="maxPoolSize" value="20" />
+        <!--当连接池中的连接耗尽的时候c3p0一次同时获取的连接数。默认值: 3 -->
+        <property name="acquireIncrement" value="5" />
+    </bean>
+
+    <!--导入配置文件-->
+    <context:property-placeholder location="classpath:config.properties"/>
+    <context:property-placeholder location="classpath:business.properties"/>
+
+    <!--配置可以在java中获取配置文件的值,
+        首先当前文件要在web.xml文件中被ContextLoaderListener加载.
+        本文件上部要引入相应的命名空间
+        注意@value中的值写法#{settings['username']}
+        另: 一定要加注解,且被扫描到.由容器自动实例化
+        -->
+    <util:properties id="settings" location="classpath:business.properties"/>
+
+    <!-- 配置hibernate的SessionFactory
+        如果使用的是注解,不能使用localSessionFactory,而应该用AnnotationSessionFactoryBean
+    -->
+    <bean id="sessionFactory"
+          class="org.springframework.orm.hibernate3.annotation.AnnotationSessionFactoryBean">
+        <!-- 注入数据源 相关信息看源码 -->
+        <property name="dataSource" ref="dataSource" />
+
+
+
+        <!--mappingResource配置  packagesToScan-->
+        <property name="packagesToScan" value="com.gongxiangcloud.youjv.core" />
+        <!-- hibernate配置信息 -->
+        <property name="hibernateProperties">
+            <props>
+                <prop key="hibernate.dialect">${hibernate.dialect}</prop>
+                <prop key="hibernate.show_sql">${hibernate.show_sql}</prop>
+                <prop key="hibernate.format_sql">${hibernate.format_sql}</prop>
+                <prop key="hibernate.hbm2ddl.auto">${hibernate.hbm2ddl.auto}</prop>
+
+                <!--<prop key="hibernate.current_session_context_class">thread</prop>-->
+
+                <!-- 开启二级缓存 ehcache -->
+                <!--<prop key="hibernate.cache.use_second_level_cache">${hibernate.cache.use_second_level_cache}</prop>
+                <prop key="hibernate.cache.use_query_cache">${hibernate.cache.use_query_cache}</prop>
+                <prop key="hibernate.cache.region.factory_class">${hibernate.cache.region.factory_class}</prop>
+                <prop key="hibernate.cache.provider_configuration_file_resource_path">${hibernate.cache.provider_configuration_file_resource_path}</prop>-->
+            </props>
+        </property>
+    </bean>
+
+    <!--不用sessionFactory的方式注入dao层,还可以用hibernateTemplate的方式,如下配置
+        开启hibernateTemplate,并为其注入一个sessionFactory
+    -->
+    <bean id = "hibernateTemplate" class="org.springframework.orm.hibernate3.HibernateTemplate">
+        <property name="sessionFactory" ref="sessionFactory"></property>
+    </bean>
+
+
+    <!-- 配置spring事务管理器 -->
+    <!--创建事务管理器-->
+    <bean id="transactionManager"
+          class="org.springframework.orm.hibernate3.HibernateTransactionManager">
+        <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+    <tx:annotation-driven transaction-manager="transactionManager"/>
+
+    <!--文件上传  -->
+    <bean id="multipartResolver" class="org.springframework.web.multipart.commons.CommonsMultipartResolver">
+        <!--设置文件上传大小   5MB-->
+        <property name="maxUploadSize">
+            <value>5242880</value>
+        </property>
+    </bean>
+
+    <!-- 定时任务（1分钟） -->
+    <!-- 下面标签中的class属性就是对应的定时任务的类 -->
+    <bean id="timer" class="com.gongxiangcloud.youjv.common.business.TimerTask"></bean>
+    <bean id="timerTest"
+          class="org.springframework.scheduling.quartz.MethodInvokingJobDetailFactoryBean"
+          lazy-init="false">
+        <property name="targetObject">
+            <ref bean="timer" />
+        </property>
+        <property name="targetMethod">
+            <!--下面的value中的值就是定时任务中具体的方法名-->
+            <value>test</value>
+        </property>
+    </bean>
+    <!-- 定义触发时间 -->
+    <bean id="cronTriggerBean4" class="org.springframework.scheduling.quartz.CronTriggerBean">
+        <property name="jobDetail" ref="timerTest"></property>
+        <property name="cronExpression" value="0 0/1 * * * ?"></property>
+    </bean>
+
+    <!-- 总管理类 如果将lazy-init='false'那么容器启动就会执行调度程序 -->
+    <bean class="org.springframework.scheduling.quartz.SchedulerFactoryBean">
+        <property name="triggers">
+            <list>
+                <ref bean="cronTriggerBean4" />
+            </list>
+        </property>
+    </bean>
+
+</beans>
